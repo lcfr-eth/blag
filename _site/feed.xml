@@ -1,0 +1,119 @@
+
+
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>http://0.0.0.0:4000/</id>
+  <title>LCFR</title>
+  <subtitle>A minimal, responsive and feature-rich Jekyll theme for technical writing.</subtitle>
+  <updated>2025-03-20T00:23:04-04:00</updated>
+  <author>
+    <name>LCFR</name>
+    <uri>http://0.0.0.0:4000/</uri>
+  </author>
+  <link rel="self" type="application/atom+xml" href="http://0.0.0.0:4000/feed.xml"/>
+  <link rel="alternate" type="text/html" hreflang="en"
+    href="http://0.0.0.0:4000/"/>
+  <generator uri="https://jekyllrb.com/" version="4.4.1">Jekyll</generator>
+  <rights> © 2025 LCFR </rights>
+  <icon>/assets/img/favicons/favicon.ico</icon>
+  <logo>/assets/img/favicons/favicon-96x96.png</logo>
+
+
+  
+  <entry>
+    <title>Bounty: ENS NameWrapper expiry issue</title>
+    <link href="http://0.0.0.0:4000/posts/ens-namewrapper-bounty/" rel="alternate" type="text/html" title="Bounty: ENS NameWrapper expiry issue" />
+    <published>2022-12-24T19:28:22-05:00</published>
+  
+    <updated>2022-12-24T19:28:22-05:00</updated>
+  
+    <id>http://0.0.0.0:4000/posts/ens-namewrapper-bounty/</id>
+    <content type="text/html" src="http://0.0.0.0:4000/posts/ens-namewrapper-bounty/" />
+    <author>
+      <name>LCFR</name>
+    </author>
+
+  
+    
+    <category term="web3" />
+    
+  
+
+  <summary>Quick Links About ENS and ENS Subdomains About the NameWrapper Finding the bug Proof of Concept Patch Reward  About ENS and ENS Subdomains Currently Ethereum Name Service or just ENS for short is an ERC721 NFT collection. A user can mint a token that represents something similar to a domain or username where as its a memorable representation of a users wallet address such as a word, phrase, pat...</summary>
+
+  </entry>
+
+  
+  <entry>
+    <title>Rescuing ENS names from compromised wallets.</title>
+    <link href="http://0.0.0.0:4000/posts/rescue-ens-names/" rel="alternate" type="text/html" title="Rescuing ENS names from compromised wallets." />
+    <published>2022-05-18T20:28:22-04:00</published>
+  
+    <updated>2022-05-18T20:28:22-04:00</updated>
+  
+    <id>http://0.0.0.0:4000/posts/rescue-ens-names/</id>
+    <content type="text/html" src="http://0.0.0.0:4000/posts/rescue-ens-names/" />
+    <author>
+      <name>LCFR</name>
+    </author>
+
+  
+    
+    <category term="web3" />
+    
+  
+
+  <summary>Recently we had a client message our support channel asking about strange transactions.  Shortly after we determined the users wallet had been compromised and a drainer/sweeper script attached to the address.  Understandably the user was quite frantic but patient and allowed us to come up with a plan to try and help rescue his ENS names.  The “drainer” problem:  Generally when a wallet is compr...</summary>
+
+  </entry>
+
+  
+  <entry>
+    <title>Bounty: Using a Web2 bug to duplicate ENS names</title>
+    <link href="http://0.0.0.0:4000/posts/duplicate-ens-names/" rel="alternate" type="text/html" title="Bounty: Using a Web2 bug to duplicate ENS names" />
+    <published>2022-05-01T20:28:22-04:00</published>
+  
+    <updated>2022-05-01T20:28:22-04:00</updated>
+  
+    <id>http://0.0.0.0:4000/posts/duplicate-ens-names/</id>
+    <content type="text/html" src="http://0.0.0.0:4000/posts/duplicate-ens-names/" />
+    <author>
+      <name>LCFR</name>
+    </author>
+
+  
+    
+    <category term="web3" />
+    
+  
+
+  <summary>Quick Links About ENS: Decentralized Domain Name System ENS Registration &amp;amp;amp; Metadata explained ENS Subgraph Service ENS Metadata Service ZWJ, ZWNJ, ZWSP ? Null-bytes &amp;amp;amp; String termination Idea Results The Patche(s)   Revisited 12/2022 Reward  About ENS: Decentralized Domain Name System  ENS (Ethereum Name Service) is a decentralized domain name system built on Ethereum. Its goal is to mak...</summary>
+
+  </entry>
+
+  
+  <entry>
+    <title>Session Riding OpenSSH (multiplexing) to bypass 2FA</title>
+    <link href="http://0.0.0.0:4000/posts/local-ssh-2fa-bypass/" rel="alternate" type="text/html" title="Session Riding OpenSSH (multiplexing) to bypass 2FA" />
+    <published>2021-06-06T20:28:22-04:00</published>
+  
+    <updated>2021-06-06T20:28:22-04:00</updated>
+  
+    <id>http://0.0.0.0:4000/posts/local-ssh-2fa-bypass/</id>
+    <content type="text/html" src="http://0.0.0.0:4000/posts/local-ssh-2fa-bypass/" />
+    <author>
+      <name>LCFR</name>
+    </author>
+
+  
+    
+    <category term="web2" />
+    
+  
+
+  <summary>Quick Links What is SSH session injection Brief overview of SSH session creation code Good hackers read documentation Abusing SSH multiplexing Detection EOF  What is SSH session injection?  Mostly personal notes after revisiting the subject recently while reminiscing on past hacking techniques.  In the past SSH session injection allowed an attacker to inject code into a target users ssh client ...</summary>
+
+  </entry>
+
+</feed>
+
+
