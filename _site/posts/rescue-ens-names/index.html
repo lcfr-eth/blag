@@ -724,9 +724,9 @@
   class="readtime"
   data-bs-toggle="tooltip"
   data-bs-placement="bottom"
-  title="1734 words"
+  title="2539 words"
 >
-  <em>9 min</em> read</span>
+  <em>14 min</em> read</span>
 
         </div>
       </div>
@@ -1029,61 +1029,347 @@ Example: <code class="language-plaintext highlighter-rouge">https://rpc.flashbot
 54
 55
 56
-</pre></td><td class="rouge-code"><pre><span class="n">contract</span> <span class="n">transferProxy</span> <span class="o">{</span>
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+</pre></td><td class="rouge-code"><pre><span class="c1">// SPDX-License-Identifier: MiladyCometh</span>
+<span class="n">pragma</span> <span class="n">solidity</span> <span class="o">^</span><span class="mf">0.8</span><span class="o">.</span><span class="mi">17</span><span class="o">;</span>
 
-    <span class="c1">// custom error = 0x383462e29</span>
+<span class="c1">/// @author lcfr.eth</span>
+<span class="c1">/// @notice helper contract for Flashbots rescues using bundler.lcfr.io</span>
+
+<span class="c1">/// @dev avoids using freememptr &amp; unnecessily calling add() in loops etc</span>
+<span class="c1">/// @dev this is fine as our functions execution are short &amp; sweet.</span>
+<span class="c1">/// @dev for transferFrom calls the calldata is 0x64 bytes which is the size of the scratch space.</span>
+
+<span class="c1">/// @dev however for ERC1155 safeTransferFrom calls the calldata is 0xc4 bytes which is larger than the scratch space.</span>
+<span class="c1">/// @dev we dont care tho - smash all the memory like its a stack based buffer and the year is 1992AD and your name is aleph1.</span>
+
+<span class="c1">/// @dev We dont call any other internal / contract methods and only perform external calls:</span>
+<span class="c1">/// @dev No hash functions are used in our function executions so we dont need to care about 0x00 - 0x3f</span>
+<span class="c1">/// @dev No dynamic memory is used in our function executions so we dont need to care about 0x40 - 0x5f</span>
+<span class="c1">/// @dev No operations requiring the zero slot so we just plow through 0x60-0x7f+ also</span>
+
+<span class="n">contract</span> <span class="n">transferProxy</span> <span class="o">{</span>
+    <span class="c1">// 0x383462e2 == "notApproved()"</span>
     <span class="n">error</span> <span class="nf">notApproved</span><span class="o">();</span>
+    <span class="c1">// 0x543bf3c4 == "arrayLengthMismatch()"</span>
+    <span class="n">error</span> <span class="nf">arrayLengthMismatch</span><span class="o">();</span>
 
-    <span class="n">function</span> <span class="nf">transfer</span><span class="o">(</span><span class="n">bytes</span><span class="o">[]</span> <span class="n">calldata</span> <span class="n">_data</span><span class="o">,</span> <span class="n">address</span> <span class="n">_contract</span><span class="o">,</span> <span class="n">address</span> <span class="n">_from</span><span class="o">)</span> <span class="n">external</span> <span class="o">{</span>
+    <span class="c1">// transfers a batch of ERC721 tokens to a single address recipient from an approved caller address</span>
+    <span class="n">function</span> <span class="nf">approvedTransferERC721</span><span class="o">(</span><span class="n">uint256</span><span class="o">[]</span> <span class="n">calldata</span> <span class="n">tokenIds</span><span class="o">,</span> <span class="n">address</span> <span class="n">_contract</span><span class="o">,</span> <span class="n">address</span> <span class="n">_from</span><span class="o">,</span> <span class="n">address</span> <span class="n">_to</span><span class="o">)</span> <span class="n">external</span> <span class="o">{</span>
         <span class="n">assembly</span> <span class="o">{</span>
-            <span class="c1">// checks if the caller is approved by _from on _contract</span>
-            <span class="c1">//</span>
-            <span class="c1">// store the selector for isApprovedForAll at memory offset 0x00-0x04</span>
-            <span class="n">mstore</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="n">shl</span><span class="o">(</span><span class="mi">224</span><span class="o">,</span> <span class="mh">0xe985e9c5</span><span class="o">))</span> 
-            <span class="c1">// store the _from parameter in the calldata 0x04-0x24</span>
+            <span class="c1">// check if caller isApprovedForAll() by _from on _contract or revert</span>
+            <span class="c1">// 0xac1db17cac1db17cac1db17cac1db17cac1db17cac1db17cac1db17cac1db17c</span>
+            <span class="n">mstore</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="mh">0xe985e9c5ac1db17cac1db17cac1db17cac1db17cac1db17cac1db17cac1db17c</span><span class="o">)</span>
+            <span class="c1">// store _from as the first parameter to isApprovedForAll()</span>
             <span class="n">mstore</span><span class="o">(</span><span class="mh">0x04</span><span class="o">,</span> <span class="n">_from</span><span class="o">)</span> 
-            <span class="c1">// store the msg.sender as the operator parameter at 0x24-0x44</span>
+            <span class="c1">// store caller as the second parameter to isApprovedForAll()</span>
             <span class="n">mstore</span><span class="o">(</span><span class="mh">0x24</span><span class="o">,</span> <span class="n">caller</span><span class="o">())</span>
-            <span class="c1">// perform staticcall on the contract with the stored calldata from memory 0x00 - 0x44 </span>
+            <span class="c1">// call _contract.isApprovedForAll(_from, caller())</span>
             <span class="n">let</span> <span class="n">success</span> <span class="o">:=</span> <span class="n">staticcall</span><span class="o">(</span><span class="n">gas</span><span class="o">(),</span> <span class="n">_contract</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x44</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">)</span>
-            <span class="c1">// call is finished, overwrite the calldata at 0x00 with returndata</span>
+            <span class="c1">// copy return data to 0x00 </span>
             <span class="n">returndatacopy</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="n">returndatasize</span><span class="o">())</span>
-            <span class="c1">// if call failed then revert</span>
+            <span class="c1">// revert if the call was not successful</span>
             <span class="k">if</span> <span class="nf">iszero</span><span class="o">(</span><span class="n">success</span><span class="o">)</span> <span class="o">{</span>
                 <span class="n">revert</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="n">returndatasize</span><span class="o">())</span>
             <span class="o">}</span>
-            <span class="c1">// if the caller isnt approved revert with custom error 'notApproved'</span>
+            <span class="c1">// check if the return data is 0x01 (true) or revert</span>
             <span class="k">if</span> <span class="nf">iszero</span><span class="o">(</span><span class="n">mload</span><span class="o">(</span><span class="mh">0x00</span><span class="o">))</span> <span class="o">{</span>
-                <span class="c1">// store the selector for the notApproved error at 0x00 - 0x4</span>
-                <span class="n">mstore</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="n">shl</span><span class="o">(</span><span class="mi">224</span><span class="o">,</span> <span class="mh">0x383462e29</span><span class="o">))</span>
-                <span class="c1">// revert with the custom error selector at 0x00-0x4</span>
-                <span class="n">revert</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x04</span><span class="o">)</span>
+                <span class="n">mstore</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x383462e2</span><span class="o">)</span>
+                <span class="n">revert</span><span class="o">(</span><span class="mh">0x1c</span><span class="o">,</span> <span class="mh">0x04</span><span class="o">)</span>
             <span class="o">}</span>
 
+            <span class="c1">// build calldata using the _from and _to thats supplied as an argument</span>
+            <span class="c1">// transferFrom(address,address,uint256) selector</span>
+            <span class="c1">// store the selector at 0x00</span>
+            <span class="n">mstore</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x23b872ddac1db17cac1db17cac1db17cac1db17cac1db17cac1db17cac1db17c</span><span class="o">)</span>
+            <span class="c1">// store the caller as the first parameter to transferFrom()</span>
+            <span class="n">mstore</span><span class="o">(</span><span class="mh">0x04</span><span class="o">,</span> <span class="n">_from</span><span class="o">)</span>
+            <span class="c1">// store _to as the second parameter to transferFrom()</span>
+            <span class="n">mstore</span><span class="o">(</span><span class="mh">0x24</span><span class="o">,</span> <span class="n">_to</span><span class="o">)</span>
+
+            <span class="c1">// start our loop at 0</span>
             <span class="n">let</span> <span class="n">i</span> <span class="o">:=</span> <span class="mi">0</span>
             <span class="k">for</span> <span class="o">{}</span> <span class="mi">1</span> <span class="o">{</span> <span class="nl">i:</span><span class="o">=</span> <span class="n">add</span><span class="o">(</span><span class="n">i</span><span class="o">,</span> <span class="mi">1</span><span class="o">)</span> <span class="o">}</span> <span class="o">{</span>
-                <span class="c1">// i starts at 0 while length starts at 1</span>
-                <span class="k">if</span> <span class="nf">eq</span><span class="o">(</span><span class="n">i</span><span class="o">,</span> <span class="n">_data</span><span class="o">.</span><span class="na">length</span><span class="o">){</span> <span class="k">break</span> <span class="o">}</span>
-                <span class="c1">// elements start at _data.offset</span>
-                <span class="c1">// +0x00: length</span>
-                <span class="c1">// +0x20: data</span>
-                <span class="c1">// shl(5, i) = mul(0x20, i)</span>
-                <span class="n">let</span> <span class="n">data</span> <span class="o">:=</span> <span class="n">calldataload</span><span class="o">(</span><span class="n">add</span><span class="o">(</span><span class="n">_data</span><span class="o">.</span><span class="na">offset</span><span class="o">,</span> <span class="n">shl</span><span class="o">(</span><span class="mi">5</span><span class="o">,</span> <span class="n">i</span><span class="o">)))</span>
-                <span class="n">let</span> <span class="n">len</span> <span class="o">:=</span> <span class="n">calldataload</span><span class="o">(</span><span class="n">add</span><span class="o">(</span><span class="n">_data</span><span class="o">.</span><span class="na">offset</span><span class="o">,</span> <span class="n">data</span><span class="o">))</span>
-                <span class="c1">// copy the bytes string from the array to 0x00 </span>
-                <span class="n">calldatacopy</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="n">add</span><span class="o">(</span><span class="n">_data</span><span class="o">.</span><span class="na">offset</span><span class="o">,</span> <span class="n">add</span><span class="o">(</span><span class="n">data</span><span class="o">,</span> <span class="mh">0x20</span><span class="o">)),</span> <span class="n">len</span><span class="o">)</span>
-                <span class="c1">// call the _contract with the calldata copied to 0x00    </span>
-                <span class="n">success</span> <span class="o">:=</span> <span class="n">call</span><span class="o">(</span> <span class="n">gas</span><span class="o">(),</span> <span class="n">_contract</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="n">len</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">)</span>
-                <span class="c1">// if a call reverts then revert the entire call.</span>
+                <span class="c1">// check if we have reached the end of the array. _data len starts at 1</span>
+                <span class="k">if</span> <span class="nf">eq</span><span class="o">(</span><span class="n">i</span><span class="o">,</span> <span class="n">tokenIds</span><span class="o">.</span><span class="na">length</span><span class="o">){</span> <span class="k">break</span> <span class="o">}</span>
+
+                <span class="c1">// copy the token id as the third parameter to transferFrom()</span>
+                <span class="n">calldatacopy</span><span class="o">(</span><span class="mh">0x44</span><span class="o">,</span> <span class="n">add</span><span class="o">(</span><span class="n">tokenIds</span><span class="o">.</span><span class="na">offset</span><span class="o">,</span> <span class="n">shl</span><span class="o">(</span><span class="mi">5</span><span class="o">,</span> <span class="n">i</span><span class="o">)),</span> <span class="mh">0x20</span><span class="o">)</span>
+
+                <span class="c1">// call the encoded method        </span>
+                <span class="n">success</span> <span class="o">:=</span> <span class="n">call</span><span class="o">(</span> <span class="n">gas</span><span class="o">(),</span> <span class="n">_contract</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x64</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">)</span>
+
                 <span class="k">if</span> <span class="nf">iszero</span><span class="o">(</span><span class="n">success</span><span class="o">)</span> <span class="o">{</span>
-                    <span class="c1">// copy the revert reason to 0x00</span>
                     <span class="n">returndatacopy</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="n">returndatasize</span><span class="o">())</span>
-                    <span class="c1">// return the revert from 0x00</span>
                     <span class="n">revert</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="n">returndatasize</span><span class="o">())</span>
                 <span class="o">}</span>
             <span class="o">}</span>
         <span class="o">}</span>
     <span class="o">}</span>
+
+    <span class="c1">/// @notice transfer assets from the owner to the _to address</span>
+    <span class="n">function</span> <span class="nf">ownerTransferERC721</span><span class="o">(</span><span class="n">uint256</span><span class="o">[]</span> <span class="n">calldata</span> <span class="n">tokenIds</span><span class="o">,</span> <span class="n">address</span> <span class="n">_to</span><span class="o">,</span> <span class="n">address</span> <span class="n">_contract</span><span class="o">)</span> <span class="n">external</span> <span class="o">{</span>
+        <span class="n">assembly</span> <span class="o">{</span>
+            <span class="c1">// transferFrom(address,address,uint256) selector</span>
+            <span class="c1">// store the selector at 0x00</span>
+            <span class="n">mstore</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x23b872ddac1db17cac1db17cac1db17cac1db17cac1db17cac1db17cac1db17c</span><span class="o">)</span>
+            <span class="c1">// store the caller as the first parameter to transferFrom()</span>
+            <span class="n">mstore</span><span class="o">(</span><span class="mh">0x04</span><span class="o">,</span> <span class="n">caller</span><span class="o">())</span>
+            <span class="c1">// store _to as the second parameter to transferFrom()</span>
+            <span class="n">mstore</span><span class="o">(</span><span class="mh">0x24</span><span class="o">,</span> <span class="n">_to</span><span class="o">)</span>
+
+             <span class="n">let</span> <span class="n">i</span> <span class="o">:=</span> <span class="mi">0</span>
+             <span class="k">for</span> <span class="o">{}</span> <span class="mi">1</span> <span class="o">{</span> <span class="nl">i:</span><span class="o">=</span> <span class="n">add</span><span class="o">(</span><span class="n">i</span><span class="o">,</span> <span class="mi">1</span><span class="o">)</span> <span class="o">}</span> <span class="o">{</span>
+                <span class="k">if</span> <span class="nf">eq</span><span class="o">(</span><span class="n">i</span><span class="o">,</span> <span class="n">tokenIds</span><span class="o">.</span><span class="na">length</span><span class="o">){</span> <span class="k">break</span> <span class="o">}</span>
+
+                <span class="c1">// copy the token id as the third parameter to transferFrom()</span>
+                <span class="n">calldatacopy</span><span class="o">(</span><span class="mh">0x44</span><span class="o">,</span> <span class="n">add</span><span class="o">(</span><span class="n">tokenIds</span><span class="o">.</span><span class="na">offset</span><span class="o">,</span> <span class="n">shl</span><span class="o">(</span><span class="mi">5</span><span class="o">,</span> <span class="n">i</span><span class="o">)),</span> <span class="mh">0x20</span><span class="o">)</span>
+                
+                <span class="c1">// call transferFrom</span>
+                <span class="n">let</span> <span class="n">success</span> <span class="o">:=</span> <span class="n">call</span><span class="o">(</span> <span class="n">gas</span><span class="o">(),</span> <span class="n">_contract</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x64</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">)</span>
+
+                <span class="k">if</span> <span class="nf">iszero</span><span class="o">(</span><span class="n">success</span><span class="o">)</span> <span class="o">{</span>
+                    <span class="n">returndatacopy</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="n">returndatasize</span><span class="o">())</span>
+                    <span class="n">revert</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="n">returndatasize</span><span class="o">())</span>
+                <span class="o">}</span>
+            <span class="o">}</span>
+        <span class="o">}</span>
+    <span class="o">}</span>
+
+    <span class="c1">/// @notice intended for transferring an array of tokens to an array of addresses from the owner</span>
+    <span class="n">function</span> <span class="nf">ownerAirDropERC721</span><span class="o">(</span><span class="n">uint256</span><span class="o">[]</span> <span class="n">calldata</span> <span class="n">tokenIds</span><span class="o">,</span> <span class="n">address</span><span class="o">[]</span> <span class="n">calldata</span> <span class="n">_addrs</span><span class="o">,</span> <span class="n">address</span> <span class="n">_contract</span><span class="o">)</span> <span class="n">external</span> <span class="o">{</span>
+        <span class="n">assembly</span> <span class="o">{</span>
+            <span class="c1">// check if the arrays are the same length</span>
+            <span class="k">if</span> <span class="nf">iszero</span><span class="o">(</span><span class="n">eq</span><span class="o">(</span><span class="n">tokenIds</span><span class="o">.</span><span class="na">length</span><span class="o">,</span> <span class="n">_addrs</span><span class="o">.</span><span class="na">length</span><span class="o">))</span> <span class="o">{</span>
+                <span class="n">mstore</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x543bf3c4</span><span class="o">)</span>
+                <span class="n">revert</span><span class="o">(</span><span class="mh">0x1c</span><span class="o">,</span> <span class="mh">0x04</span><span class="o">)</span>
+            <span class="o">}</span>
+            <span class="c1">// transferFrom(address,address,uint256) selector</span>
+            <span class="c1">// store the selector at 0x00</span>
+            <span class="n">mstore</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x23b872ddac1db17cac1db17cac1db17cac1db17cac1db17cac1db17cac1db17c</span><span class="o">)</span>
+            <span class="c1">// store the caller as the first parameter to transferFrom()</span>
+            <span class="n">mstore</span><span class="o">(</span><span class="mh">0x04</span><span class="o">,</span> <span class="n">caller</span><span class="o">())</span>
+
+             <span class="n">let</span> <span class="n">i</span> <span class="o">:=</span> <span class="mi">0</span>
+             <span class="k">for</span> <span class="o">{}</span> <span class="mi">1</span> <span class="o">{</span> <span class="nl">i:</span><span class="o">=</span> <span class="n">add</span><span class="o">(</span><span class="n">i</span><span class="o">,</span> <span class="mi">1</span><span class="o">)</span> <span class="o">}</span> <span class="o">{</span>
+                <span class="k">if</span> <span class="nf">eq</span><span class="o">(</span><span class="n">i</span><span class="o">,</span> <span class="n">tokenIds</span><span class="o">.</span><span class="na">length</span><span class="o">){</span> <span class="k">break</span> <span class="o">}</span>
+
+                <span class="c1">// offset for both arrays</span>
+                <span class="n">let</span> <span class="n">offset</span> <span class="o">:=</span> <span class="n">shl</span><span class="o">(</span><span class="mi">5</span><span class="o">,</span> <span class="n">i</span><span class="o">)</span>
+
+                <span class="c1">// copy the address to send to as the second parameter to transferFrom()</span>
+                <span class="n">calldatacopy</span><span class="o">(</span><span class="mh">0x24</span><span class="o">,</span> <span class="n">add</span><span class="o">(</span><span class="n">_addrs</span><span class="o">.</span><span class="na">offset</span><span class="o">,</span> <span class="n">offset</span><span class="o">),</span> <span class="mh">0x20</span><span class="o">)</span>
+
+                <span class="c1">// copy the token id as the third parameter to transferFrom()</span>
+                <span class="n">calldatacopy</span><span class="o">(</span><span class="mh">0x44</span><span class="o">,</span> <span class="n">add</span><span class="o">(</span><span class="n">tokenIds</span><span class="o">.</span><span class="na">offset</span><span class="o">,</span> <span class="n">offset</span><span class="o">),</span> <span class="mh">0x20</span><span class="o">)</span>
+                
+                <span class="c1">// call transferFrom</span>
+                <span class="n">let</span> <span class="n">success</span> <span class="o">:=</span> <span class="n">call</span><span class="o">(</span> <span class="n">gas</span><span class="o">(),</span> <span class="n">_contract</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x64</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">)</span>
+
+                <span class="k">if</span> <span class="nf">iszero</span><span class="o">(</span><span class="n">success</span><span class="o">)</span> <span class="o">{</span>
+                    <span class="n">returndatacopy</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="n">returndatasize</span><span class="o">())</span>
+                    <span class="n">revert</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="n">returndatasize</span><span class="o">())</span>
+                <span class="o">}</span>
+            <span class="o">}</span>
+        <span class="o">}</span>
+    <span class="o">}</span>
+
+    <span class="c1">// we just smash all the memory from 0x00 - 0xC4 like its a stack based buffer and the year is 1992.</span>
+    <span class="n">function</span> <span class="nf">ownerAirDropERC1155</span><span class="o">(</span><span class="n">uint256</span><span class="o">[]</span> <span class="n">calldata</span> <span class="n">_tokenIds</span><span class="o">,</span> <span class="n">uint256</span><span class="o">[]</span> <span class="n">calldata</span> <span class="n">_amounts</span><span class="o">,</span> <span class="n">address</span><span class="o">[]</span> <span class="n">calldata</span> <span class="n">_addrs</span><span class="o">,</span> <span class="n">address</span> <span class="n">_contract</span><span class="o">)</span> <span class="n">external</span> <span class="o">{</span>
+        <span class="n">assembly</span> <span class="o">{</span>
+
+            <span class="c1">// check if all 3 the arrays are the same length</span>
+            <span class="n">let</span> <span class="n">lenCheck</span> <span class="o">:=</span> <span class="n">eq</span><span class="o">(</span><span class="n">_tokenIds</span><span class="o">.</span><span class="na">length</span><span class="o">,</span> <span class="n">_amounts</span><span class="o">.</span><span class="na">length</span><span class="o">)</span>
+            <span class="n">lenCheck</span> <span class="o">:=</span> <span class="n">and</span><span class="o">(</span><span class="n">lenCheck</span><span class="o">,</span> <span class="n">eq</span><span class="o">(</span><span class="n">_amounts</span><span class="o">.</span><span class="na">length</span><span class="o">,</span> <span class="n">_addrs</span><span class="o">.</span><span class="na">length</span><span class="o">))</span>
+
+            <span class="k">if</span> <span class="nf">iszero</span><span class="o">(</span><span class="n">lenCheck</span><span class="o">)</span> <span class="o">{</span>
+                <span class="n">mstore</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x543bf3c4</span><span class="o">)</span>
+                <span class="n">revert</span><span class="o">(</span><span class="mh">0x1c</span><span class="o">,</span> <span class="mh">0x04</span><span class="o">)</span>
+            <span class="o">}</span>
+
+            <span class="c1">// ERC1155 safeTransferFrom(address,address,uint256,uint256,bytes)</span>
+
+            <span class="c1">// store the selector at 0x00</span>
+            <span class="n">mstore</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="mh">0xf242432aac1db17cac1db17cac1db17cac1db17cac1db17cac1db17cac1db17c</span><span class="o">)</span>
+            <span class="c1">// store the caller as the first parameter to safeTransferFrom()</span>
+            <span class="n">mstore</span><span class="o">(</span><span class="mh">0x04</span><span class="o">,</span> <span class="n">caller</span><span class="o">())</span>
+
+             <span class="n">let</span> <span class="n">i</span> <span class="o">:=</span> <span class="mi">0</span>
+             <span class="k">for</span> <span class="o">{}</span> <span class="mi">1</span> <span class="o">{</span> <span class="nl">i:</span><span class="o">=</span> <span class="n">add</span><span class="o">(</span><span class="n">i</span><span class="o">,</span> <span class="mi">1</span><span class="o">)</span> <span class="o">}</span> <span class="o">{</span>
+                <span class="k">if</span> <span class="nf">eq</span><span class="o">(</span><span class="n">i</span><span class="o">,</span> <span class="n">_tokenIds</span><span class="o">.</span><span class="na">length</span><span class="o">){</span> <span class="k">break</span> <span class="o">}</span>
+
+                <span class="c1">// offset for both arrays</span>
+                <span class="n">let</span> <span class="n">offset</span> <span class="o">:=</span> <span class="n">shl</span><span class="o">(</span><span class="mi">5</span><span class="o">,</span> <span class="n">i</span><span class="o">)</span>
+
+                <span class="c1">// copy the address to send to as the second parameter</span>
+                <span class="n">calldatacopy</span><span class="o">(</span><span class="mh">0x24</span><span class="o">,</span> <span class="n">add</span><span class="o">(</span><span class="n">_addrs</span><span class="o">.</span><span class="na">offset</span><span class="o">,</span> <span class="n">offset</span><span class="o">),</span> <span class="mh">0x20</span><span class="o">)</span>
+
+                <span class="c1">// copy the token id as the third parameter</span>
+                <span class="n">calldatacopy</span><span class="o">(</span><span class="mh">0x44</span><span class="o">,</span> <span class="n">add</span><span class="o">(</span><span class="n">_tokenIds</span><span class="o">.</span><span class="na">offset</span><span class="o">,</span> <span class="n">offset</span><span class="o">),</span> <span class="mh">0x20</span><span class="o">)</span>
+
+                <span class="c1">// copy the amount as the fourth parameter</span>
+                <span class="n">calldatacopy</span><span class="o">(</span><span class="mh">0x64</span><span class="o">,</span> <span class="n">add</span><span class="o">(</span><span class="n">_amounts</span><span class="o">.</span><span class="na">offset</span><span class="o">,</span> <span class="n">offset</span><span class="o">),</span> <span class="mh">0x20</span><span class="o">)</span>
+
+                <span class="c1">// create an empty bytes and copy it as the fifth parameter</span>
+                <span class="n">mstore</span><span class="o">(</span><span class="mh">0x84</span><span class="o">,</span> <span class="mh">0xa0</span><span class="o">)</span>
+                <span class="n">mstore</span><span class="o">(</span><span class="mh">0xa4</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">)</span>
+
+                <span class="c1">// call safeTransferFrom</span>
+                <span class="n">let</span> <span class="n">success</span> <span class="o">:=</span> <span class="n">call</span><span class="o">(</span> <span class="n">gas</span><span class="o">(),</span> <span class="n">_contract</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0xc4</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span> <span class="o">)</span>
+
+                <span class="k">if</span> <span class="nf">iszero</span><span class="o">(</span><span class="n">success</span><span class="o">)</span> <span class="o">{</span>
+                    <span class="n">returndatacopy</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="mh">0x00</span><span class="o">,</span> <span class="n">returndatasize</span><span class="o">())</span>
+                    <span class="n">revert</span><span class="o">(</span><span class="mh">0x00</span><span class="o">,</span> <span class="n">returndatasize</span><span class="o">())</span>
+                <span class="o">}</span>
+            <span class="o">}</span>
+        <span class="o">}</span>
+
+    <span class="o">}</span>
+
+    <span class="c1">// ApprovedTransferERC1155 can be done via the ERC1155 safeBatchTransferFrom() function in the UI</span>
+    <span class="c1">// OwnerTransferERC1155 can be done via the ERC1155 safeBatchTransferFrom() function in the UI</span>
 <span class="o">}</span>
 </pre></td></tr></tbody></table></code></div></div>
 <h1 id="building-a-better-bundler--cont">Building a better bundler .. cont.</h1>
